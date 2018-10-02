@@ -1,0 +1,108 @@
+---
+title: "Machine Learning Project"
+author: "Laura Clark"
+date: "October 1, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(AppliedPredictiveModeling)
+library(caret)
+library(pgmm)
+library(rattle)
+library(tidyverse)
+
+```
+
+## Background & Objective
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.  Data was collected from accelerometers on the belt, forearm, arm, and dumbbell.  Participants were asked to preform the lifts correctly and incorrectly in 5 different ways.   
+
+The goal of this project is to predict the manner in which they did the exercise (correctly or one of the 4 incorrect movements) using the provided datasets.
+
+## Data Cleaning & Splitting
+First the data was read into memory with the read.csv function.  Columns in the dataset that contained 75% or more missing values or blanks were removed from the working data.  The columns of data that would not be considered predictor values were also removed (i.e. timestamps, names, etc.).  The training data was further split into a training and validation dataset to calculated out of sample error.  
+
+
+```{r cleaning}
+#read in the data
+train <- read.csv("pml-training.csv", header = TRUE)
+test <- read.csv("pml-testing.csv", header = TRUE)
+
+#calculate 75% data
+train75 <- dim(train)[1] * 0.75
+test75 <- dim(test)[1] * 0.75
+
+set.seed(112986)
+
+#keep column with at least 75% of data not na or blank & remove first 7 columns 
+train <- train[ ,colSums(is.na(train)) < train75]
+train <- train[ ,colSums(train != "") > train75]
+train <- train[, 8:60]
+test <- test[ ,colSums(is.na(test)) < test75]
+test <- test[ ,colSums(test != "") > test75]
+test <- test[, 8:60]
+
+#create test & validation data
+inTrain <- createDataPartition(train$classe, p = 0.7, list = FALSE)
+trainData <- train[inTrain, ]
+valid <- train[-inTrain, ]
+
+```
+
+## Model Building - Random Forest
+
+Before the random forest model was created.  A traincontrol was added to apply cross validation to the dataset using 5 folds.  The random forest model was built with the training data.  Values were then predicted using the validation dataset and a confusion matrix was calculated. 
+
+```{r model1, cache = TRUE}
+#create cross validation for model
+trcontrol <- trainControl(method = "cv", number = 5)
+
+#build model - random forest
+model1 <- train(classe ~ ., data = trainData, method = "rf", trControl = trcontrol)
+
+#predict values for valid dataset
+predict_model1 <- predict(model1, valid)
+
+#create confusion matrix for model accuracy 
+conf_model1 <- confusionMatrix(valid$classe, predict_model1)
+print(conf_model1)
+
+
+```
+
+It appears that the random forest model has a accuracy of ~ 99.3% leaving an out of sample error of 0.7%.   
+
+## Model Building - Classification Tree
+
+A classification tree model built with the training dataset.  The results of the tree model were plotted.  Values were then predicted again using the validation dataset and a confusion matrix was calculated.
+
+```{r model2, cache = TRUE}
+
+#build model - Trees
+model2 <- train(classe ~., data = trainData, method = "rpart")
+
+#plot tree
+fancyRpartPlot(model2$finalModel)
+
+#predict values for valid dataset
+predict_model2 <- predict(model2, valid)
+
+#create confusion matrix for 2nd model
+conf_model2 <- confusionMatrix(valid$classe, predict_model2)
+print(conf_model2)
+
+```
+The random forest model has a accuracy of ~ 49.5% leaving an out of sample error of 50.5%.  Based on the two models that were fitted it appears that the 2nd model (randon forest) is much more accurate.  This is the model that will be used to predict the values for the test dataset.  
+
+## Using the Model to Predict the Test Data
+```{r predict test}
+
+#use 1st model to predict values for test set
+(predict_test <- predict(model1, test))
+               
+```
+
+
